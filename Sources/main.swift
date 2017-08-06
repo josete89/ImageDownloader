@@ -13,7 +13,7 @@ let queue = OperationQueue()
 queue.maxConcurrentOperationCount = 1
 
 
-let textSearch = "adidas t-shirt"
+let textSearch = "text_to_search"
 let fileHandle = FileManager.default
 let folder = "/Users/alcaljos/adidas_images/\(textSearch)"
 var bool = ObjCBool(true)
