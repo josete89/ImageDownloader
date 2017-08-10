@@ -24,40 +24,80 @@ let textFile = "\(folder)/\(textSearch).txt"
 if !fileHandle.fileExists(atPath:textFile ){
      fileHandle.createFile(atPath: textFile, contents: nil, attributes: nil)
 }
+
 let fileWriter = FileHandle(forWritingAtPath: textFile)!
 
-let proccessPhoto:(FlickrPhoto) -> () = { photo in
-    if let image = NSImage(contentsOf: photo.photoUrl) {
-        let finalImg = image.resizeMaintainingAspectRatio(withSize: NSSize(width: 232, height: 232))!
-        let data = finalImg.tiffRepresentation!
-        let uuid = UUID().uuidString
-        try! data.write(to: URL(fileURLWithPath: "\(folder)/\(uuid).jpg"))
-        
-        
-        fileWriter.seekToEndOfFile()
-        fileWriter.write("\(uuid): \(photo.title) \n".data(using: .utf8)!)
-        
-    }
+
+struct UrlImages:Codable{
+    let url:String?
 }
 
-func createOperation(_ page:Int) -> Operation {
+let fileUrl = URL(fileURLWithPath: "")
+let data = try! Data(contentsOf: fileUrl)
+let json = try! JSONDecoder().decode([UrlImages].self, from: data)
+
+let ops:[GenericOperation] = json.flatMap({ urlImage in
+    
+    guard let imageUrl = urlImage.url,let url = URL(string: imageUrl) else {
+        return nil;
+    }
+    
     return GenericOperation {  completion in
-        FlickrProvider.fetchPhotosForSearchText(searchText: textSearch,page: page, onCompletion: { (error, photos) in
-            guard error == nil,let fullPhotos = photos else{
-                print(error.debugDescription)
-                return
-            }
-            fullPhotos.forEach({ proccessPhoto($0) })
-            completion()
-        })
+        if let image = NSImage(contentsOf: url) {
+            let finalImg = image.resizeMaintainingAspectRatio(withSize: NSSize(width: 232, height: 232))!
+            let data = finalImg.tiffRepresentation!
+            let uuid = UUID().uuidString
+            let title = url.deletingPathExtension().lastPathComponent
+            let disallowedChars = CharacterSet.urlPathAllowed.inverted
+            let fileName = title.components(separatedBy: disallowedChars).joined(separator: " ")
+            
+            try! data.write(to: URL(fileURLWithPath: "\(folder)/\(uuid).jpg"))
+            
+            
+            fileWriter.seekToEndOfFile()
+            fileWriter.write("\(uuid): \(fileName) \n".data(using: .utf8)!)
+            
+        }
+        completion()
+    }
+})
+
+queue.addOperations(ops, waitUntilFinished: true)
+
+// ########################### FLICKR ########################
+if (false){
+    let proccessPhoto:(FlickrPhoto) -> () = { photo in
+        if let image = NSImage(contentsOf: photo.photoUrl) {
+            let finalImg = image.resizeMaintainingAspectRatio(withSize: NSSize(width: 232, height: 232))!
+            let data = finalImg.tiffRepresentation!
+            let uuid = UUID().uuidString
+            try! data.write(to: URL(fileURLWithPath: "\(folder)/\(uuid).jpg"))
+            
+            
+            fileWriter.seekToEndOfFile()
+            fileWriter.write("\(uuid): \(photo.title) \n".data(using: .utf8)!)
+            
+        }
+    }
+    func createOperation(_ page:Int) -> Operation {
+        return GenericOperation {  completion in
+            FlickrProvider.fetchPhotosForSearchText(searchText: textSearch,page: page, onCompletion: { (error, photos) in
+                guard error == nil,let fullPhotos = photos else{
+                    print(error.debugDescription)
+                    return
+                }
+                fullPhotos.forEach({ proccessPhoto($0) })
+                completion()
+            })
+        }
+    }
+    
+    for var i in 1..<3 {
+        queue.addOperation(createOperation(i))
     }
 }
+// ########################### FLICKR ########################
 
-
-
-for var i in 1..<3 {
-    queue.addOperation(createOperation(i))
-}
 
 let obs = queue.observe(\OperationQueue.operationCount) { (queue, value) in
     print(" Opeartion number changed -> \(queue.operationCount)")
